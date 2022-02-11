@@ -1,0 +1,1886 @@
+---
+title: "PACS_Prediction_Model"
+author: "Cervia et al."
+date: "2/11/2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+header-includes:
+- \usepackage{gensymb}
+- \usepackage{hanging}
+- \usepackage{hyperref}
+- \usepackage{fancyhdr}
+- \usepackage{lipsum}
+- \usepackage{color}
+- \usepackage{soul}
+- \usepackage{dcolumn}
+- \usepackage{xcolor}
+- \usepackage{tcolorbox}
+- \usepackage[shortlabels]{enumitem}
+- \usepackage{dcolumn}
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+cat("\014")
+```
+
+# 1. Import packages and data
+```{r}
+library("grid")
+# install.packages("biostatUZH", repos = "http://R-Forge.R-project.org")
+library("biostatUZH")                 #version 1.8.-1
+# install.packages("remotes")
+# remotes::install_github("BavoDC/CalibrationCurves")
+library("CalibrationCurves")          #version 0.1.2
+library("ggplot2")                    #version 3.3.5
+library("ggpubr")                     #version 0.4.0
+library("tidyverse")                  #version 1.3.1
+library("readxl")                     #version 1.3.1
+library("rstudioapi")                 #version 0.13
+library("epitools")                   #version 0.5-10.1
+library("pROC")                       #version 1.18.0
+library("gbm")                        #version 2.1.8
+library("shrink")                     #version 1.2.1
+library("ggstatsplot")                #version 0.9.0
+library("dcurves")                    #version 0.2.0
+library("mgcv")                       #version 1.8-38
+library("sjPlot")                     #version 2.8.9 
+library("scales")                     #version 1.1.1
+library("interactions")               #version 1.1.5
+```
+
+# 2. Data wrangling and grouping
+# 2a. Import Data
+```{r}
+#Import Data
+current_path = rstudioapi::getActiveDocumentContext()$path
+setwd(dirname(current_path))
+
+#Enter excel file name
+xdata <-
+  read_excel("/Users/peterjemley/Downloads/41467_2021_27797_MOESM5_ESM.xlsx",
+             na = "NA")
+
+#Factors
+xdata$Sampling_month <- factor(xdata$Sampling_month,
+                               levels = c("ONE", "SIX", "TWELVE"))
+
+xdata$COVID <- factor(xdata$COVID,
+                      levels = c("Healthy", "COVID"))
+
+xdata$SevMax2 <- factor(xdata$SevMax2,
+                        levels = c("Healthy", "Mild", "Severe"))
+
+xdata$SevMax6 <- factor(
+  xdata$SevMax6,
+  levels = c(
+    "Healthy",
+    "Asymptomatic",
+    "Mild",
+    "Pneu" ,
+    "Sev Pneu" ,
+    "Mild ARDS" ,
+    "Mod ARDS",
+    "Sev ARDS"
+  )
+)
+
+xdata$Hospitalized <- factor(xdata$Hospitalized,
+                             levels = c("NO", "YES"))
+
+xdata$PACS <- factor(xdata$PACS,
+                     levels = c("NO", "YES"))
+
+#Add Healthy to six month measurements
+healthy <-
+  xdata %>% filter(SevMax2 == "Healthy") %>% mutate(Sampling_month = "SIX", Complete_OST = "NO")
+xdata <- rbind(xdata, healthy)
+```
+
+# 2b. Create groups
+```{r}
+xdata_selectR <-
+  #followed-up patients
+  xdata[xdata$Resampling %in% c("YES"),] 
+
+#followed-up patients + healthy controls
+xdata_selectR2 <-
+  xdata[xdata$Resampling_andH %in% c("YES"),]  
+
+#Primary infection
+xdata_selectONE <-
+  xdata[xdata$Sampling_month %in% c("ONE"),]  
+xdata_selectRONE <-
+  xdata_selectR[xdata_selectR$Sampling_month %in% c("ONE"),]
+xdata_selectR2ONE <-
+  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE"),]
+
+#6-month follow-up
+xdata_selectRSIX <-
+  xdata_selectR[xdata_selectR$Sampling_month %in% c("SIX"),] 
+xdata_selectR2SIX <-
+  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("SIX"),]
+
+#Primary infection & 6-month follow-up
+xdata_selectR2OS <-
+  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE", "SIX"),] 
+
+#Without Healthy controls
+xdata_selectRnH <-
+  xdata_selectR[xdata_selectR$SevMax2 %in% c("Mild", "Severe"),]          
+xdata_selectRONEnH <-
+  xdata_selectRONE[xdata_selectRONE$SevMax2 %in% c("Mild", "Severe"),]
+xdata_selectRSIXnH <-
+  xdata_selectRSIX[xdata_selectRSIX$SevMax2 %in% c("Mild", "Severe"),]
+xdata_selectRnHOS <-
+  xdata_selectRnH[xdata_selectRnH$Sampling_month %in% c("ONE", "SIX"),]
+
+#Only Healhty controls
+xdata_selectONEH <-
+  xdata_selectONE[xdata_selectONE$SevMax2 %in% c("Healthy"),]   
+
+#Patients with history of asthma
+xdata_selectRONE_Asthma <-
+  xdata_selectRONE[xdata_selectRONE$Asthma %in% c("YES"),]  
+xdata_selectRONE_nAsthma <-
+  xdata_selectRONE[xdata_selectRONE$Asthma %in% c("NO"),]
+
+#Hospitalized patients
+xdata_selectRONEHosp <-
+  xdata_selectRONE[xdata_selectRONE$Hospitalized %in% c("YES"),]  
+xdata_selectRONEnHosp <-
+  xdata_selectRONE[xdata_selectRONE$Hospitalized %in% c("NO"),]
+
+#Patients with PACS
+xdata_selectR2ONEPACS <-
+  xdata_selectR2ONE[xdata_selectR2ONE$PACS %in% c("YES"),]  
+xdata_selectR2ONEnPACS <-
+  xdata_selectR2ONE[xdata_selectR2ONE$PACS %in% c("NO"),]
+
+#Complete observaions: Patients with blood sampling at all three patient visits
+xdata_selectRcOST <-
+  xdata_selectR[xdata_selectR$Complete_OST %in% c("YES"),]  
+
+xdata_selectR2cOST <-
+  xdata_selectR2[xdata_selectR2$Complete_OST %in% c("YES"),]
+xdata_selectRcOSTPACS <-
+  xdata_selectRcOST[xdata_selectRcOST$PACS %in% c("YES"),]
+xdata_selectRcOSTnPACS <-
+  xdata_selectRcOST[xdata_selectRcOST$PACS %in% c("NO"),]
+```
+
+# 2c. Comparisons and color vectors
+```{r}
+my_comparisons <-
+  list(c("Healthy", "Mild") ,
+       c("Healthy", "Severe"),
+       c("Mild", "Severe"))
+my_colors_PACS <- c("#ffa44a", "#c7264f")
+```
+
+# 3. Functions for data analysis
+```{r}
+alpha <- scales::alpha
+```
+
+
+```{r}
+GeomSplitViolin <- ggproto(
+  "GeomSplitViolin",
+  GeomViolin,
+  draw_group = function(self, data, ..., draw_quantiles = NULL) {
+    # Original function by Jan Gleixner (@jan-glx)
+    # Adjustments by Wouter van der Bijl (@Axeman)
+    data <-
+      transform(
+        data,
+        xminv = x - violinwidth * (x - xmin),
+        xmaxv = x + violinwidth * (xmax - x)
+      )
+    grp <- data[1, "group"]
+    newdata <-
+      plyr::arrange(transform(data, x = if (grp %% 2 == 1)
+        xminv
+        else
+          xmaxv), if (grp %% 2 == 1)
+            y
+        else-y)
+    newdata <-
+      rbind(newdata[1,], newdata, newdata[nrow(newdata),], newdata[1,])
+    newdata[c(1, nrow(newdata) - 1, nrow(newdata)), "x"] <-
+      round(newdata[1, "x"])
+    if (length(draw_quantiles) > 0 &
+        !scales::zero_range(range(data$y))) {
+      stopifnot(all(draw_quantiles >= 0), all(draw_quantiles <= 1))
+      quantiles <-
+        create_quantile_segment_frame(data, draw_quantiles, split = TRUE, 
+      grp = grp)
+      aesthetics <-
+        data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")), 
+        drop = FALSE]
+      aesthetics$alpha <-
+        rep(1, nrow(quantiles))
+      both <- cbind(quantiles, aesthetics)
+      quantile_grob <-
+        GeomPath$draw_panel(both, ...)
+      ggplot2:::ggname("geom_split_violin",
+                       grid::grobTree(GeomPolygon$draw_panel(newdata, ...), 
+                        quantile_grob))
+    }
+    else {
+      ggplot2:::ggname("geom_split_violin",
+                       GeomPolygon$draw_panel(newdata, ...))
+    }
+  }
+)
+
+create_quantile_segment_frame <-
+  function(data,
+           draw_quantiles,
+           split = FALSE,
+           grp = NULL) {
+    dens <- cumsum(data$density) / sum(data$density)
+    ecdf <- stats::approxfun(dens, data$y)
+    ys <- ecdf(draw_quantiles)
+    violin.xminvs <- (stats::approxfun(data$y, data$xminv))(ys)
+    violin.xmaxvs <- (stats::approxfun(data$y, data$xmaxv))(ys)
+    violin.xs <- (stats::approxfun(data$y, data$x))(ys)
+    if (grp %% 2 == 0) {
+      data.frame(
+        x = ggplot2:::interleave(violin.xs, violin.xmaxvs),
+        y = rep(ys, each = 2),
+        group = rep(ys, each = 2)
+      )
+    } else {
+      data.frame(
+        x = ggplot2:::interleave(violin.xminvs, violin.xs),
+        y = rep(ys, each = 2),
+        group = rep(ys, each = 2)
+      )
+    }
+  }
+
+geom_split_violin <-
+  function(mapping = NULL,
+           data = NULL,
+           stat = "ydensity",
+           position = "identity",
+           ...,
+           draw_quantiles = NULL,
+           trim = TRUE,
+           scale = "area",
+           na.rm = FALSE,
+           show.legend = NA,
+           inherit.aes = TRUE) {
+    layer(
+      data = data,
+      mapping = mapping,
+      stat = stat,
+      geom = GeomSplitViolin,
+      position = position,
+      show.legend = show.legend,
+      inherit.aes = inherit.aes,
+      params = list(
+        trim = trim,
+        scale = scale,
+        draw_quantiles = draw_quantiles,
+        na.rm = na.rm,
+        ...
+      )
+    )
+  }
+
+dodge <- position_dodge(width = .5)
+```
+
+# 4. Analysis of total immunoglobulin levels
+# 4a. IgM
+```{r}
+ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgM, fill = COVID)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = COVID), label = "p.format") +
+  labs(x = "Sampling month", fill = "", y = "Total IgM (g/l)") +
+  scale_fill_manual(values = alpha(c("Chartreuse3", "#495363"), 0.8)) +
+  ylim(-0.4, 5.2) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2ONE, aes(x = SevMax2, y = IgM, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(
+    comparison = my_comparisons,
+    method = "wilcox.test",
+    label.y = c(4.6, 4.79, 4.99)
+  ) +
+  labs(x = "", fill = "", y = "Total IgM (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  ylim(-0.4, 5.2) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2SIX, aes(x = SevMax2, y = IgM, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons, method = "wilcox.test") +
+  labs(x = "", fill = "", y = "Total IgM (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectRONEnH, aes(x = Age, y = IgM)) +
+  theme_classic() +
+  geom_point(size = 3.5, colour = "#495363") +
+  theme(
+    text = element_text(size = 15),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  geom_smooth(
+    method = "lm",
+    col = "black",
+    se = T,
+    size = 2,
+    alpha = 0.3
+  ) +
+  labs(x = "Patient age (years)", y = "Total IgM (g/l)", colour = "")
+
+CAlm3_IgM <- lm(IgM ~ Age, data = xdata_selectRONEnH)
+CAlm3_IgM_s <- coef(summary(CAlm3_IgM))
+CAlm3_IgM_p <- CAlm3_IgM_s["Age", "Pr(>|t|)"]
+grid.text(
+  paste("p =", biostatUZH::formatPval(CAlm3_IgM_p)),
+  just = "left",
+  x = 0.2,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("R2adj =", round(summary(CAlm3_IgM)$adj.r.squared, 3)),
+  just = "left",
+  x = 0.3,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+
+
+ggplot(xdata_selectRnHOS, aes(x = Sampling_month, y = IgM, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format") +
+  labs(x = "Sampling month", fill = "PACS", y = "Total IgM (g/l)") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+M_IgM <- median(na.omit(xdata_selectONEH$IgM))
+
+ggplot(data = xdata_selectR2cOST, aes(x = Days, y = IgM, group = PatID)) +
+  geom_point(aes(shape = PACS, color = COVID), size = 3.5) +
+  scale_shape_manual(values = c(1, 16)) +
+  scale_color_manual(values = c("chartreuse3", "black")) +
+  geom_line() +
+  theme_classic() +
+  stat_smooth(
+    data = xdata_selectRcOSTnPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#ffa44a",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  stat_smooth(
+    data = xdata_selectRcOSTPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#c7264f",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  labs(
+    x = "Time after symptom onset (days)",
+    y = "Total IgM (g/l)",
+    shape = "PACS",
+    colour = ""
+  ) +
+  geom_segment(aes(
+    x = -60,
+    y = M_IgM,
+    xend = -40,
+    yend = M_IgM
+  ),
+  size = 1.5,
+  color = "chartreuse3")
+
+gam0 <-
+  gam(IgM ~ s(Days, k = 3),
+      method = "REML",
+      data = xdata_selectRcOST,
+      trace = TRUE)
+gam0.s <- summary(gam0)
+gam0.p <- gam0.s$s.table[, "p-value"]
+grid.text(
+  paste(
+    "R2adj =",
+    round(gam0.s$r.sq, 2),
+    ", p =",
+    biostatUZH::formatPval(gam0.p)
+  ),
+  x = 0.6,
+  y = 0.927,
+  gp = gpar(fontsize = 11.5)
+)
+```
+
+# 4b. IgG1
+```{r}
+ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgG1, fill = COVID)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = COVID), label = "p.format") +
+  labs(x = "Sampling month", fill = "", y = "Total IgG1 (g/l)") +
+  scale_fill_manual(values = alpha(c("Chartreuse3", "#495363"), 0.8)) +
+  ylim(-0.4, 15.5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+ggplot(xdata_selectR2ONE, aes(x = SevMax2, y = IgG1, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(
+    comparison = my_comparisons,
+    method = "wilcox.test",
+    label.y = c(12, 14, 14.9)
+  ) +
+  labs(x = "", fill = "", y = "Total IgG1 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  ylim(-0.4, 15.5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2SIX, aes(x = SevMax2, y = IgG1, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "", fill = "", y = "Total IgG1 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectRONEnH, aes(x = Age, y = IgG1)) +
+  theme_classic() +
+  geom_point(size = 3.5, colour = "#495363") +
+  theme(
+    text = element_text(size = 15),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  geom_smooth(
+    method = "lm",
+    col = "black",
+    se = T,
+    size = 2,
+    alpha = 0.3
+  ) +
+  labs(x = "Patient age (years)", y = "Total IgG1 (g/l)", colour = "")
+
+CAlm3_IgG1 <- lm(IgG1 ~ Age, data = xdata_selectRONEnH)
+CAlm3_IgG1_s <- coef(summary(CAlm3_IgG1))
+CAlm3_IgG1_p <- CAlm3_IgG1_s["Age", "Pr(>|t|)"]
+grid.text(
+  paste("p =", biostatUZH::formatPval(CAlm3_IgG1_p)),
+  just = "left",
+  x = 0.2,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("R2adj =", round(summary(CAlm3_IgG1)$adj.r.squared, 3)),
+  just = "left",
+  x = 0.3,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+
+
+ggplot(xdata_selectRnHOS, aes(x = Sampling_month, y = IgG1, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles =  0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format") +
+  labs(x = "Sampling month", fill = "PACS", y = "Total IgG1 (g/l)") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+M_IgG1 <- median(na.omit(xdata_selectONEH$IgG1))
+
+ggplot(data = xdata_selectR2cOST, aes(x = Days, y = IgG1, group = PatID)) +
+  geom_point(aes(shape = PACS, color = COVID), size = 3.5) +
+  scale_shape_manual(values = c(1, 16)) +
+  scale_color_manual(values = c("chartreuse3", "black")) +
+  geom_line() +
+  theme_classic() +
+  stat_smooth(
+    data = xdata_selectRcOSTnPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#ffa44a",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  stat_smooth(
+    data = xdata_selectRcOSTPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#c7264f",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  labs(
+    x = "Time after symptom onset (days)",
+    y = "Total IgG1 (g/l)",
+    shape = "PACS",
+    colour = ""
+  ) +
+  geom_segment(aes(
+    x = -60,
+    y = M_IgG1,
+    xend = -40,
+    yend = M_IgG1
+  ),
+  size = 1.5,
+  color = "chartreuse3")
+
+gam1 <-
+  gam(IgG1 ~ s(Days, k = 3),
+      method = "REML",
+      data = xdata_selectRcOST,
+      trace = TRUE)
+gam1.s <- summary(gam1)
+gam1.p <- gam1.s$s.table[, "p-value"]
+grid.text(
+  paste(
+    "R2adj =",
+    round(gam1.s$r.sq, 2),
+    ", p =",
+    biostatUZH::formatPval(gam1.p)
+  ),
+  x = 0.6,
+  y = 0.927,
+  gp = gpar(fontsize = 11.5)
+)
+```
+
+
+# 4c. IgG3
+```{r}
+ggplot(xdata_selectR2ONEnPACS,
+       aes(x = SevMax2, y = IgG1_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "Patients without PACS", fill = "", y = "Total IgG1 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2ONEPACS,
+       aes(x = SevMax2, y = IgG1_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means() +
+  labs(x = "Patients with PACS", fill = "", y = "Total IgG1 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+#__IgG3----
+ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgG3, fill = COVID)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = COVID), label = "p.format") +
+  labs(x = "Sampling month", fill = "", y = "Total IgG3 (g/l)") +
+  scale_fill_manual(values = alpha(c("Chartreuse3", "#495363"), 0.8)) +
+  ylim(-0.4, 4.5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2ONE, aes(x = SevMax2, y = IgG3, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(
+    comparison = my_comparisons,
+    method = "wilcox.test",
+    label.y = c(3, 4.4, 4.8)
+  ) +
+  labs(x = "", fill = "", y = "Total IgG3 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  ylim(-0.4, 5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2SIX, aes(x = SevMax2, y = IgG3, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "", fill = "", y = "Total IgG3 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectRONEnH, aes(x = Age, y = IgG3)) +
+  theme_classic() +
+  geom_point(size = 3.5, colour = "#495363") +
+  theme(
+    text = element_text(size = 15),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  geom_smooth(
+    method = "lm",
+    col = "black",
+    se = T,
+    size = 2,
+    alpha = 0.3
+  ) +
+  labs(x = "Patient age (years)", y = "Total IgG3 (g/l)", colour = "")
+
+CAlm3_IgG3 <- lm(IgG3 ~ Age, data = xdata_selectRONEnH)
+CAlm3_IgG3_s <- coef(summary(CAlm3_IgG3))
+CAlm3_IgG3_p <- CAlm3_IgG3_s["Age", "Pr(>|t|)"]
+grid.text(
+  paste("p =", biostatUZH::formatPval(CAlm3_IgG3_p)),
+  just = "left",
+  x = 0.2,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("R2adj =", round(summary(CAlm3_IgG3)$adj.r.squared, 3)),
+  just = "left",
+  x = 0.3,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+
+
+ggplot(xdata_selectRnHOS, aes(x = Sampling_month, y = IgG3, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format") +
+  labs(x = "Sampling month", fill = "PACS", y = "Total IgG3 (g/l)") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+M_IgG3 <- median(na.omit(xdata_selectONEH$IgG3))
+
+ggplot(data = xdata_selectR2cOST, aes(x = Days, y = IgG3, group = PatID)) +
+  geom_point(aes(shape = PACS, color = COVID), size = 3.5) +
+  scale_shape_manual(values = c(1, 16)) +
+  scale_color_manual(values = c("chartreuse3", "black")) +
+  geom_line() +
+  theme_classic() +
+  stat_smooth(
+    data = xdata_selectRcOSTnPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#ffa44a",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  stat_smooth(
+    data = xdata_selectRcOSTPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#c7264f",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  labs(
+    x = "Time after symptom onset (days)",
+    y = "Total IgG3 (g/l)",
+    shape = "PACS",
+    colour = ""
+  ) +
+  geom_segment(aes(
+    x = -60,
+    y = M_IgG3,
+    xend = -40,
+    yend = M_IgG3
+  ),
+  size = 1.5,
+  color = "chartreuse3")
+
+gam2 <-
+  gam(IgG3 ~ s(Days, k = 3),
+      method = "REML",
+      data = xdata_selectRcOST,
+      trace = TRUE)
+gam2.s <- summary(gam2)
+gam2.p <- gam2.s$s.table[, "p-value"]
+grid.text(
+  paste(
+    "R2adj =",
+    round(gam2.s$r.sq, 2),
+    ", p =",
+    biostatUZH::formatPval(gam2.p)
+  ),
+  x = 0.6,
+  y = 0.927,
+  gp = gpar(fontsize = 11.5)
+)
+
+
+#IgG3_per
+ggplot(xdata_selectR2ONEnPACS,
+       aes(x = SevMax2, y = IgG3_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "Patients without PACS", fill = "", y = "Total IgG3 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2ONEPACS,
+       aes(x = SevMax2, y = IgG3_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means() +
+  labs(x = "Patients with PACS", fill = "", y = "Total IgG3 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+```
+
+
+# 4d. IgA
+```{r}
+ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgA, fill = COVID)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = COVID), label = "p.format") +
+  labs(x = "Sampling month", fill = "", y = "Total IgA (g/l)") +
+  scale_fill_manual(values = alpha(c("Chartreuse3", "#495363"), 0.8)) +
+  ylim(-0.4, 6.5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+ggplot(xdata_selectR2ONE, aes(x = SevMax2, y = IgA, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(
+    comparison = my_comparisons,
+    method = "wilcox.test",
+    label.y = c(5, 5.6, 6.2)
+  ) +
+  labs(x = "", fill = "", y = "Total IgA (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  ylim(-0.4, 6.5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2SIX, aes(x = SevMax2, y = IgA, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "", fill = "", y = "Total IgA (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectRONEnH, aes(x = Age, y = IgA)) +
+  theme_classic() +
+  geom_point(size = 3.5, colour = "#495363") +
+  theme(
+    text = element_text(size = 15),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  geom_smooth(
+    method = "lm",
+    col = "black",
+    se = T,
+    size = 2,
+    alpha = 0.3
+  ) +
+  labs(x = "Patient age (years)", y = "Total IgA (g/l)", colour = "")
+
+CAlm3_IgA <- lm(IgA ~ Age, data = xdata_selectRONEnH)
+CAlm3_IgA_s <- coef(summary(CAlm3_IgA))
+CAlm3_IgA_p <- CAlm3_IgA_s["Age", "Pr(>|t|)"]
+grid.text(
+  paste("p =", biostatUZH::formatPval(CAlm3_IgA_p)),
+  just = "left",
+  x = 0.2,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("R2adj =", round(summary(CAlm3_IgA)$adj.r.squared, 3)),
+  just = "left",
+  x = 0.3,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+
+
+ggplot(xdata_selectRnHOS, aes(x = Sampling_month, y = IgA, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format") +
+  labs(x = "Sampling month", fill = "PACS", y = "Total IgA (g/l)") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+M_IgA <- median(na.omit(xdata_selectONEH$IgA))
+
+ggplot(data = xdata_selectR2cOST, aes(x = Days, y = IgA, group = PatID)) +
+  geom_point(aes(shape = PACS, color = COVID), size = 3.5) +
+  scale_shape_manual(values = c(1, 16)) +
+  scale_color_manual(values = c("chartreuse3", "black")) +
+  geom_line() +
+  theme_classic() +
+  stat_smooth(
+    data = xdata_selectRcOSTnPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#ffa44a",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  stat_smooth(
+    data = xdata_selectRcOSTPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#c7264f",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  labs(
+    x = "Time after symptom onset (days)",
+    y = "Total IgA (g/l)",
+    shape = "PACS",
+    colour = ""
+  ) +
+  geom_segment(aes(
+    x = -60,
+    y = M_IgA,
+    xend = -40,
+    yend = M_IgA
+  ),
+  size = 1.5,
+  color = "chartreuse3")
+
+gam3 <-
+  gam(IgA ~ s(Days, k = 3),
+      method = "REML",
+      data = xdata_selectRcOST,
+      trace = TRUE)
+gam3.s <- summary(gam3)
+gam3.p <- gam3.s$s.table[, "p-value"]
+grid.text(
+  paste(
+    "R2adj =",
+    round(gam3.s$r.sq, 2),
+    ", p =",
+    biostatUZH::formatPval(gam3.p)
+  ),
+  x = 0.6,
+  y = 0.927,
+  gp = gpar(fontsize = 11.5)
+)
+```
+
+
+# 4e. IgG2
+```{r}
+ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgG2, fill = COVID)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = COVID), label = "p.format") +
+  labs(x = "Sampling month", fill = "", y = "Total IgG2 (g/l)") +
+  scale_fill_manual(values = alpha(c("Chartreuse3", "#495363"), 0.8)) +
+  ylim(-0.4, 12) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+ggplot(xdata_selectR2ONE, aes(x = SevMax2, y = IgG2, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons, method = "wilcox.test") +
+  labs(x = "", fill = "", y = "Total IgG2 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  ylim(-0.4, 12) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2SIX, aes(x = SevMax2, y = IgG2, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "", fill = "", y = "Total IgG2 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectRONEnH, aes(x = Age, y = IgG2)) +
+  theme_classic() +
+  geom_point(size = 3.5, colour = "#495363") +
+  theme(
+    text = element_text(size = 15),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  geom_smooth(
+    method = "lm",
+    col = "black",
+    se = T,
+    size = 2,
+    alpha = 0.3
+  ) +
+  labs(x = "Patient age (years)", y = "Total IgG2 (g/l)", colour = "")
+
+CAlm3_IgG2 <- lm(IgG2 ~ Age, data = xdata_selectRONEnH)
+CAlm3_IgG2_s <- coef(summary(CAlm3_IgG2))
+CAlm3_IgG2_p <- CAlm3_IgG2_s["Age", "Pr(>|t|)"]
+grid.text(
+  paste("p =", biostatUZH::formatPval(CAlm3_IgG2_p)),
+  just = "left",
+  x = 0.2,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("R2adj =", round(summary(CAlm3_IgG2)$adj.r.squared, 3)),
+  just = "left",
+  x = 0.3,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+
+
+ggplot(xdata_selectRnHOS, aes(x = Sampling_month, y = IgG2, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format") +
+  labs(x = "Sampling month", fill = "PACS", y = "Total IgG2 (g/l)") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+M_IgG2 <- median(na.omit(xdata_selectONEH$IgG2))
+
+ggplot(data = xdata_selectR2cOST, aes(x = Days, y = IgG2, group = PatID)) +
+  geom_point(aes(shape = PACS, color = COVID), size = 3.5) +
+  scale_shape_manual(values = c(1, 16)) +
+  scale_color_manual(values = c("chartreuse3", "black")) +
+  geom_line() +
+  theme_classic() +
+  stat_smooth(
+    data = xdata_selectRcOSTnPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#ffa44a",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  stat_smooth(
+    data = xdata_selectRcOSTPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#c7264f",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  labs(
+    x = "Time after symptom onset (days)",
+    y = "Total IgG2 (g/l)",
+    shape = "PACS",
+    colour = ""
+  ) +
+  geom_segment(aes(
+    x = -60,
+    y = M_IgG2,
+    xend = -40,
+    yend = M_IgG2
+  ),
+  size = 1.5,
+  color = "chartreuse3")
+
+gam4 <-
+  gam(IgG2 ~ s(Days, k = 3),
+      method = "REML",
+      data = xdata_selectRcOST,
+      trace = TRUE)
+gam4.s <- summary(gam4)
+gam4.p <- gam4.s$s.table[, "p-value"]
+grid.text(
+  paste(
+    "R2adj =",
+    round(gam4.s$r.sq, 2),
+    ", p =",
+    biostatUZH::formatPval(gam4.p)
+  ),
+  x = 0.6,
+  y = 0.927,
+  gp = gpar(fontsize = 11.5)
+)
+
+
+
+#IgG2_per
+ggplot(xdata_selectR2ONEnPACS,
+       aes(x = SevMax2, y = IgG2_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "Patients without PACS", fill = "", y = "Total IgG2 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2ONEPACS,
+       aes(x = SevMax2, y = IgG2_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means() +
+  labs(x = "Patients with PACS", fill = "", y = "Total IgG2 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+```
+
+
+# 4f. IgG4
+```{r}
+ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgG4, fill = COVID)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = COVID), label = "p.format") +
+  labs(x = "Sampling month", fill = "", y = "Total IgG4 (g/l)") +
+  scale_fill_manual(values = alpha(c("Chartreuse3", "#495363"), 0.8)) +
+  ylim(-0.4, 3.5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+ggplot(xdata_selectR2ONE, aes(x = SevMax2, y = IgG4, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons, method = "wilcox.test") +
+  labs(x = "", fill = "", y = "Total IgG4 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  ylim(-0.4, 3.5) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2SIX, aes(x = SevMax2, y = IgG4, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "", fill = "", y = "Total IgG4 (g/l)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectRONEnH, aes(x = Age, y = IgG4)) +
+  theme_classic() +
+  geom_point(size = 3.5, colour = "#495363") +
+  theme(
+    text = element_text(size = 15),
+    axis.text.x = element_text(size = 15),
+    axis.title.x = element_text(size = 15),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  geom_smooth(
+    method = "lm",
+    col = "black",
+    se = T,
+    size = 2,
+    alpha = 0.3
+  ) +
+  labs(x = "Patient age (years)", y = "Total IgG4 (g/l)", colour = "")
+
+CAlm3_IgG4 <- lm(IgG4 ~ Age, data = xdata_selectRONEnH)
+CAlm3_IgG4_s <- coef(summary(CAlm3_IgG4))
+CAlm3_IgG4_p <- CAlm3_IgG4_s["Age", "Pr(>|t|)"]
+grid.text(
+  paste("p =", biostatUZH::formatPval(CAlm3_IgG4_p)),
+  just = "left",
+  x = 0.2,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("R2adj =", round(summary(CAlm3_IgG4)$adj.r.squared, 3)),
+  just = "left",
+  x = 0.3,
+  y = 0.95,
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+
+
+ggplot(xdata_selectRnHOS, aes(x = Sampling_month, y = IgG4, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format") +
+  labs(x = "Sampling month", fill = "PACS", y = "Total IgG4 (g/l)") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+M_IgG4 <- median(na.omit(xdata_selectONEH$IgG4))
+
+ggplot(data = xdata_selectR2cOST, aes(x = Days, y = IgG4, group = PatID)) +
+  geom_point(aes(shape = PACS, color = COVID), size = 3.5) +
+  scale_shape_manual(values = c(1, 16)) +
+  scale_color_manual(values = c("chartreuse3", "black")) +
+  geom_line() +
+  theme_classic() +
+  stat_smooth(
+    data = xdata_selectRcOSTnPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#ffa44a",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  stat_smooth(
+    data = xdata_selectRcOSTPACS ,
+    group = 1,
+    method = "gam",
+    size = 1.5,
+    col = "#c7264f",
+    se = TRUE,
+    formula = y ~ s(x, bs = "cs", k = 3)
+  ) +
+  labs(
+    x = "Time after symptom onset (days)",
+    y = "Total IgG4 (g/l)",
+    shape = "PACS",
+    colour = ""
+  ) +
+  geom_segment(aes(
+    x = -60,
+    y = M_IgG4,
+    xend = -40,
+    yend = M_IgG4
+  ),
+  size = 1.5,
+  color = "chartreuse3")
+
+gam5 <-
+  gam(IgG4 ~ s(Days, k = 3),
+      method = "REML",
+      data = xdata_selectRcOST,
+      trace = TRUE)
+gam5.s <- summary(gam5)
+gam5.p <- gam5.s$s.table[, "p-value"]
+grid.text(
+  paste(
+    "R2adj =",
+    round(gam5.s$r.sq, 2),
+    ", p =",
+    biostatUZH::formatPval(gam5.p)
+  ),
+  x = 0.6,
+  y = 0.927,
+  gp = gpar(fontsize = 11.5)
+)
+
+
+
+#IgG4_per
+ggplot(xdata_selectR2ONEnPACS,
+       aes(x = SevMax2, y = IgG4_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means(comparison = my_comparisons) +
+  labs(x = "Patients without PACS", fill = "", y = "Total IgG4 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+ggplot(xdata_selectR2ONEPACS,
+       aes(x = SevMax2, y = IgG4_per, fill = SevMax2)) +
+  geom_violin(trim = F, draw_quantiles = c(0.5)) +
+  geom_point(position = position_jitterdodge(),
+             alpha = 0.4,
+             size = 2.8) +
+  theme_classic() +
+  stat_compare_means() +
+  labs(x = "Patients with PACS", fill = "", y = "Total IgG4 (% of total IgG)") +
+  scale_fill_manual(values = c("chartreuse3", "#A6C6F0", "#F58E8E")) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+```
+
+
+# 5. Development of prediction model's variables
+# 5a. Linearity of variables
+```{r}
+plot(gam(
+  PACS ~ s(Age),
+  family = binomial(link = "logit"),
+  data = xdata_selectRONEnH,
+  trace = TRUE
+))
+plot(gam(
+  PACS ~ s(scale(Age)),
+  family = binomial(link = "logit"),
+  data = xdata_selectRONEnH,
+  trace = TRUE
+))
+
+plot(gam(
+  PACS ~ s(Nr_Symptoms, k = 6),
+  family = binomial(link = "logit"),
+  data = xdata_selectRONEnH,
+  trace = TRUE
+))
+
+plot(gam(
+  PACS ~ s(IgM),
+  family = binomial(link = "logit"),
+  data = xdata_selectRONEnH,
+  trace = TRUE
+))
+
+plot(gam(
+  PACS ~ s(IgG3),
+  family = binomial(link = "logit"),
+  data = xdata_selectRONEnH,
+  trace = TRUE
+))
+```
+
+# 5b. Age
+```{r}
+ggplot(xdata_selectRONEnH, aes(x = Sampling_month, y = Age, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format", label.y = 120) +
+  labs(x = "Sampling month", fill = "PACS", y = "Patient age") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+```
+
+# 5c. Number of symptoms during primary infection
+```{r}
+ggplot(xdata_selectRONEnH,
+       aes(x = Sampling_month, y = Nr_Symptoms, fill = PACS)) +
+  geom_split_violin(trim = F, draw_quantiles = 0.5) +
+  geom_point(shape = 16, position = dodge) +
+  theme_classic() +
+  stat_compare_means(aes(group = PACS), label = "p.format", label.y = 6) +
+  labs(x = "Sampling month", fill = "PACS", y = "Number of symptoms (0-5)") +
+  scale_fill_manual(values = my_colors_PACS) +
+  geom_boxplot(
+    width = 0.25,
+    notch = FALSE,
+    notchwidth = .4,
+    outlier.shape = NA,
+    coef = 0
+  )
+
+
+ggplot(xdata_selectRONEnH, aes(x = SevMax6, y = Nr_Symptoms)) +
+  geom_boxplot() +
+  geom_point(shape = 16, position = "dodge") +
+  theme_classic() +
+  stat_compare_means(aes(group = SevMax6), label.y = 6) +
+  labs(x = "Disease severity",  y = "Number of symptoms (0-5)")
+
+
+Symp <-
+  table(xdata_selectRONEnH$Nr_Symptoms, xdata_selectRONEnH$PACS)
+Symp_per <-
+  table(xdata_selectRONEnH$Nr_Symptoms, xdata_selectRONEnH$PACS)[, 2] /  table(xdata_selectRONEnH$Nr_Symptoms)
+barplot(
+  t(Symp),
+  main = "",
+  xlab = "Number of symptoms during acute COVID-19",
+  col = c("#ffa44a", "#c7264f"),
+  legend = c("NO PACS", "PACS"),
+)
+barplot(
+  Symp_per,
+  main = "",
+  ylab = "PACS (%)",
+  xlab = "Number of symptoms during acute COVID-19",
+  col = c("#c7264f")
+)
+```
+
+# 5d. History of asthma bronchiale
+```{r}
+pie(
+  table(xdata_selectRONE_nAsthma$PACS),
+  main = "Patients without \n history of asthma bronchiale",
+  init.angle = 90,
+  clockwise = TRUE,
+  labels = c("Acute COVID-19", "Post-acute COVID-19 Syndrome"),
+  col = c("#ffa44a", "#c7264f")
+)
+
+pie(
+  table(xdata_selectRONE_Asthma$PACS),
+  main = "Patients with \n history of asthma bronchiale",
+  init.angle = 90,
+  clockwise = TRUE,
+  labels = c("Acute COVID-19", "Post-acute COVID-19 Syndrome"),
+  col = c("#ffa44a", "#c7264f")
+)
+
+ggplot(xdata_selectONE, aes(x = Asthma, y = IgG3)) +
+  geom_boxplot(outlier.shape = NA, fill = "#F58E8E") +
+  geom_point(
+    position = position_jitterdodge(),
+    alpha = 0.8,
+    aes(col = SevMax6),
+    size = 2.8
+  ) +
+  stat_compare_means() +
+  theme_classic() +
+  scale_color_manual(
+    values = c(
+      "chartreuse3",
+      "grey",
+      "#A6C6F0",
+      "#4D77EB",
+      "#F58E8E",
+      "#E64A4A",
+      "#D91A1A",
+      "#8F0B0B"
+    )
+  ) +
+  labs(x = "Asthma bronchiale", y = "Total IgG3 (g/l)", 
+       colour = "COVID-19 severity")
+```
+
+# 5e. COVID-19 severity/hospitalization
+```{r}
+Sev <- table(xdata_selectRONEnH$SevMax6, xdata_selectRONEnH$PACS)
+Sev_per <-
+  table(xdata_selectRONEnH$SevMax6, xdata_selectRONEnH$PACS)[, 2] /  
+  table(xdata_selectRONEnH$SevMax6)
+barplot(
+  t(Sev),
+  main = "",
+  xlab = "COVID-19 severity",
+  col = c("#ffa44a", "#c7264f"),
+  legend = c("NO PACS", "PACS"),
+)
+barplot(
+  Sev_per,
+  main = "",
+  ylab = "PACS (%)",
+  xlab = "COVID-19 severity",
+  col = c("#c7264f"),
+  ylim = c(0, 1)
+)
+```
+
+
+# 6. Development of prediction model: PACS score
+```{r}
+PACS_model <-
+  glm(
+    PACS ~ scale(Age) + Nr_Symptoms + Asthma + IgM * IgG3,
+    xdata_selectRONEnH,
+    family = binomial(link = "logit"),
+    x = TRUE
+  )
+
+PACS_predictions <-
+  predict(PACS_model, xdata_selectRONEnH, type = "response")
+per_roc_LC1_Asthma_IgG3_IgM_IgA1_Sym <-
+  roc(PACS ~ PACS_predictions, xdata_selectRONEnH, ci = TRUE)
+
+
+ggcoefstats(PACS_model, output = "plot")
+ggcoefstats(PACS_model, output = "tidy")
+```
+
+# 6a. Primary infection
+```{r}
+PACS_model_sh <-
+  shrink(PACS_model, type = "global", method = "dfbeta")
+
+PACS_predictions_outpatients <-
+  predict(PACS_model_sh, xdata_selectRONEnHosp, type = "response")
+roc_PACS_outpatients <-
+  roc(PACS ~ PACS_predictions_outpatients,
+      xdata_selectRONEnHosp,
+      ci = TRUE)
+
+PACS_predictions_hospitalized <-
+  predict(PACS_model_sh, xdata_selectRONEHosp, type = "response")
+roc_PACS_hospitalized <-
+  roc(PACS ~ PACS_predictions_hospitalized,
+      xdata_selectRONEHosp,
+      ci = TRUE)
+
+
+pROC::plot.roc(
+  per_roc_LC1_Asthma_IgG3_IgM_IgA1_Sym,
+  print.auc = TRUE,
+  ci = TRUE,
+  legacy.axes = TRUE,
+  print.auc.y = .6,
+  print.auc.x = .4
+)
+pROC::plot.roc(
+  roc_PACS_outpatients,
+  print.auc = TRUE,
+  ci = TRUE,
+  legacy.axes = TRUE,
+  axes = TRUE,
+  print.auc.x = .4,
+  add = F,
+  print.auc.col = c("#4D77EB"),
+  col = c("#4D77EB")
+)
+pROC::plot.roc(
+  roc_PACS_hospitalized,
+  print.auc = TRUE,
+  ci = TRUE,
+  legacy.axes = TRUE,
+  print.auc.y = .4,
+  print.auc.x = .4,
+  add = TRUE,
+  print.auc.col = c("#E64A4A"),
+  col = c("#E64A4A")
+)
+
+
+calib1 <-
+  val.prob.ci.2(PACS_predictions, as.numeric(xdata_selectRONEnH$PACS) - 1,
+                pl = TRUE)
+
+calibrate.plot(
+  y = xdata_selectRONEnH$PACS,
+  p = PACS_predictions,
+  las = 1,
+  shade.col = "lightgrey",
+  rug.par = list(side = 1, col = "black", lwd = 2)
+)
+
+Brier1 <- calib1[11]
+Int1 <- calib1[12]
+Slope1 <- calib1[13]
+grid.text(
+  paste("Brier score =", round(as.numeric(Brier1), 3)),
+  just = "left",
+  x = 0.15,
+  y = unit(0.7, "npc"),
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("Calibration-in-the-large =", round(as.numeric(Int1), 2)),
+  just = "left",
+  x = 0.15,
+  y = unit(0.8, "npc"),
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("Calibration slope =", round(as.numeric(Slope1), 2)),
+  just = "left",
+  x = 0.15,
+  y = unit(0.75, "npc"),
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+```
+
+# 6b. 6-months follow-up
+```{r}
+PACS_predictions_6m <-
+  predict(PACS_model_sh, xdata_selectRSIXnH, type = "response")
+roc_PACS_6m <-
+  roc(PACS ~ PACS_predictions_6m, xdata_selectRSIXnH, ci = TRUE)
+
+pROC::plot.roc(
+  roc_PACS_6m,
+  print.auc = TRUE,
+  ci = TRUE,
+  legacy.axes = TRUE,
+  print.auc.y = .6,
+  print.auc.x = .4
+)
+
+calib2 <-
+  val.prob.ci.2(PACS_predictions_6m,
+                as.numeric(xdata_selectRSIXnH$PACS) - 1,
+                pl = TRUE)
+
+calibrate.plot(
+  y = xdata_selectRSIXnH$PACS,
+  p = PACS_predictions_6m,
+  las = 1,
+  shade.col = "lightgrey",
+  rug.par = list(side = 1, col = "black", lwd = 2)
+)
+
+Brier2 <- calib2[11]
+Int2 <- calib2[12]
+Slope2 <- calib2[13]
+grid.text(
+  paste("Brier score =", round(as.numeric(Brier2), 3)),
+  just = "left",
+  x = 0.15,
+  y = unit(0.7, "npc"),
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("Calibration-in-the-large =", round(as.numeric(Int2), 2)),
+  just = "left",
+  x = 0.15,
+  y = unit(0.8, "npc"),
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+grid.text(
+  paste("Calibration slope =", round(as.numeric(Slope2), 2)),
+  just = "left",
+  x = 0.15,
+  y = unit(0.75, "npc"),
+  gp = gpar(fontsize = 11.5, col = "black")
+)
+```
+
+# 6c. Decision curve analysis
+```{r}
+xdata_selectRONEnH_2 <-
+  xdata_selectRONEnH %>%
+  mutate(prob_PACS = predict(PACS_model, xdata_selectRONEnH, type = "response"))
+
+dca(PACS ~
+      prob_PACS ,
+    xdata_selectRONEnH_2) %>%
+  plot(smooth = TRUE)
+
+dca(PACS ~
+      prob_PACS ,
+    xdata_selectRONEnH_2 %>% filter(Hospitalized == "YES")) %>%
+  plot(smooth = TRUE)
+```
+
+# 6d. Interaction plots
+```{r}
+interact_plot(
+  PACS_model,
+  pred = IgG3,
+  modx = IgM,
+  modx.values = "plus-minus",
+  interval = TRUE,
+  int.width = 0.8
+)
+interact_plot(
+  PACS_model,
+  pred = IgM,
+  modx = IgG3,
+  modx.values = "plus-minus",
+  interval = TRUE,
+  int.width = 0.8
+)
+```
+
+
+# 7. Code for implementation of PACS score
+```{r}
+xdata_selectRONEnHnew = xdata_selectRONEnH %>%
+  mutate(Asthma = ifelse(Asthma == "YES", 1, 0))
+
+PACS_score <-
+  glm(
+    PACS ~ -1 + offset(
+      -0.981011 + 0.2616998 * scale(Age) +
+        0.3307986 * Nr_Symptoms +
+        1.896502 * Asthma +
+        0.8429766 * IgM  +
+        1.3716198 * IgG3+-1.5316550 * IgM * IgG3
+    ),
+    family = binomial,
+    data = xdata_selectRONEnHnew
+  )
+
+new_PACS_score_prediction <-
+  predict(PACS_score, xdata_selectRONEnHnew, type = "response")
+
+roc_PACS_score <-
+  roc(PACS ~ new_PACS_score_prediction, xdata_selectRONEnHnew, ci = TRUE)
+
+pROC::plot.roc(
+  roc_PACS_score,
+  print.auc = TRUE,
+  ci = TRUE,
+  legacy.axes = TRUE
+)
+```
+
