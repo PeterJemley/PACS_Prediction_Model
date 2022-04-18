@@ -29,12 +29,7 @@ cat("\014")
 
 # 1. Import & load packages
 Packages are listed alphabetically to check versions with packageVersion(). 
-##TO_DO
-### install.packages("remotes") Not needed?
 ```{r}
-### Not needed?
-# install.packages("remotes")
-
 library("biostatUZH", quietly = TRUE)                 #version 1.8.0
 # packageVersion("biostatUZH")
 # install.packages("biostatUZH", repos = "http://R-Forge.R-project.org")
@@ -76,6 +71,10 @@ library("pROC", quietly = TRUE)                       #version 1.18.0
 library("readxl", quietly = TRUE)                     #version 1.4.0
 # packageVersion("readxl")
 
+# library("remotes", quietly = TRUE)                  #version 2.4.2
+# install.packages("remotes")                           
+# packageVersion("remotes")
+
 library("rstudioapi", quietly = TRUE)                 #version 0.13
 # packageVersion("rstudioapi")
 
@@ -94,7 +93,6 @@ library("tidyverse", quietly = TRUE)                  #version 1.3.1
 
 # 2. Data wrangling and grouping
 # 2a. Import Data
-
 ```{r}
 #Import Data
 current_path = rstudioapi::getActiveDocumentContext()$path
@@ -267,7 +265,6 @@ my_colors_PACS <- c("#ffa44a", "#c7264f")
 ```
 
 # 3. Functions for data analysis
-
 ```{r}
 alpha <- scales::alpha
 ```
@@ -301,19 +298,19 @@ GeomSplitViolin <- ggproto(
         !scales::zero_range(range(data$y))) {
       stopifnot(all(draw_quantiles >= 0), all(draw_quantiles <= 1))
       quantiles <-
-        create_quantile_segment_frame(data, draw_quantiles, split = TRUE, 
-      grp = grp)
+        create_quantile_segment_frame(data, draw_quantiles, split = TRUE,
+                                      grp = grp)
       aesthetics <-
-        data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")), 
-        drop = FALSE]
+        data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")),
+             drop = FALSE]
       aesthetics$alpha <-
         rep(1, nrow(quantiles))
       both <- cbind(quantiles, aesthetics)
       quantile_grob <-
         GeomPath$draw_panel(both, ...)
       ggplot2:::ggname("geom_split_violin",
-                       grid::grobTree(GeomPolygon$draw_panel(newdata, ...), 
-                        quantile_grob))
+                       grid::grobTree(GeomPolygon$draw_panel(newdata, ...),
+                                      quantile_grob))
     }
     else {
       ggplot2:::ggname("geom_split_violin",
