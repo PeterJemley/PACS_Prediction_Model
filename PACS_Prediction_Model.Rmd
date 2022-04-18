@@ -27,34 +27,72 @@ rm(list = ls())
 cat("\014")
 ```
 
-# 1. Import packages and data
-
+# 1. Import & load packages
+Packages are listed alphabetically to check versions with packageVersion(). 
+##TO_DO
+### install.packages("remotes") Not needed?
 ```{r}
-library("grid", quietly = TRUE)
-# install.packages("biostatUZH", repos = "http://R-Forge.R-project.org")
-library("biostatUZH", quietly = TRUE)                 #version 1.8.-1
+### Not needed?
 # install.packages("remotes")
-# remotes::install_github("BavoDC/CalibrationCurves")
+
+library("biostatUZH", quietly = TRUE)                 #version 1.8.0
+# packageVersion("biostatUZH")
+# install.packages("biostatUZH", repos = "http://R-Forge.R-project.org")
+
 library("CalibrationCurves", quietly = TRUE)          #version 0.1.2
-library("ggplot2", quietly = TRUE)                    #version 3.3.5
-library("ggpubr", quietly = TRUE)                     #version 0.4.0
-library("tidyverse", quietly = TRUE)                  #version 1.3.1
-library("readxl", quietly = TRUE)                     #version 1.3.1
-library("rstudioapi", quietly = TRUE)                 #version 0.13
-library("epitools", quietly = TRUE)                   #version 0.5-10.1
-library("pROC", quietly = TRUE)                       #version 1.18.0
-library("gbm", quietly = TRUE)                        #version 2.1.8
-library("shrink", quietly = TRUE)                     #version 1.2.1
-library("ggstatsplot", quietly = TRUE)                #version 0.9.0
+# packageVersion("CalibrationCurves")
+# remotes::install_github("BavoDC/CalibrationCurves")
+
 library("dcurves", quietly = TRUE)                    #version 0.2.0
-library("mgcv", quietly = TRUE)                       #version 1.8-38
-library("sjPlot", quietly = TRUE)                     #version 2.8.9
-library("scales", quietly = TRUE)                     #version 1.1.1
+# packageVersion("dcurves")
+
+library("epitools", quietly = TRUE)                   #version 0.5-10.1
+# packageVersion("epitools")
+
+library("gbm", quietly = TRUE)                        #version 2.1.8
+# packageVersion("gbm")
+
+library("ggplot2", quietly = TRUE)                    #version 3.3.5
+# packageVersion("ggplot2")
+
+library("ggpubr", quietly = TRUE)                     #version 0.4.0
+# packageVersion("ggpubr")
+
+library("ggstatsplot", quietly = TRUE)                #version 0.9.1
+# packageVersion("ggstatsplot")
+
+library("grid", quietly = TRUE)                       #version 4.1.3
+# packageVersion("grid")
+
 library("interactions", quietly = TRUE)               #version 1.1.5
+# packageVersion("interactions")
+
+library("mgcv", quietly = TRUE)                       #version 1.8.40
+# packageVersion("mgcv")
+
+library("pROC", quietly = TRUE)                       #version 1.18.0
+# packageVersion("pROC")
+
+library("readxl", quietly = TRUE)                     #version 1.4.0
+# packageVersion("readxl")
+
+library("rstudioapi", quietly = TRUE)                 #version 0.13
+# packageVersion("rstudioapi")
+
+library("scales", quietly = TRUE)                     #version 1.2.0
+# packageVersion("scales")
+
+library("shrink", quietly = TRUE)                     #version 1.2.2
+# packageVersion("shrink")
+
+library("sjPlot", quietly = TRUE)                     #version 2.8.10
+# packageVersion("sjPlot")
+
+library("tidyverse", quietly = TRUE)                  #version 1.3.1
+# packageVersion("tidyverse")
 ```
 
 # 2. Data wrangling and grouping
-
 # 2a. Import Data
 
 ```{r}
@@ -101,90 +139,130 @@ xdata$PACS <- factor(xdata$PACS,
 
 #Add Healthy to six month measurements
 healthy <-
-  xdata %>% filter(SevMax2 == "Healthy") %>% mutate(Sampling_month = "SIX", Complete_OST = "NO")
+  xdata %>% filter(SevMax2 == "Healthy") %>% mutate(Sampling_month = "SIX",
+                                                    Complete_OST = "NO")
+
 xdata <- rbind(xdata, healthy)
 ```
 
 # 2b. Create groups
-
+## 2b.1 Followed-up patients
 ```{r}
-xdata_selectR <-
-  #followed-up patients
-  xdata[xdata$Resampling %in% c("YES"),] 
+# Followed-up patients
+xdata_selectR <- xdata[xdata$Resampling %in% c("YES"), ]
+```
 
-#followed-up patients + healthy controls
-xdata_selectR2 <-
-  xdata[xdata$Resampling_andH %in% c("YES"),]  
+## 2b.2 Followed-up patients + healthy controls
+```{r}
+# Followed-up patients + healthy controls
+xdata_selectR2 <- xdata[xdata$Resampling_andH %in% c("YES"), ]
+```
 
-#Primary infection
-xdata_selectONE <-
-  xdata[xdata$Sampling_month %in% c("ONE"),]  
+## 2b.3 Primary infection
+```{r}
+# Primary infection
+xdata_selectONE <- xdata[xdata$Sampling_month %in% c("ONE"), ]
+
 xdata_selectRONE <-
-  xdata_selectR[xdata_selectR$Sampling_month %in% c("ONE"),]
+  xdata_selectR[xdata_selectR$Sampling_month %in% c("ONE"), ]
+
 xdata_selectR2ONE <-
-  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE"),]
+  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE"), ]
+```
 
-#6-month follow-up
+## 2.b.3 6-month follow-up
+```{r}
+# 6-month follow-up
 xdata_selectRSIX <-
-  xdata_selectR[xdata_selectR$Sampling_month %in% c("SIX"),] 
+  xdata_selectR[xdata_selectR$Sampling_month %in% c("SIX"), ]
+
 xdata_selectR2SIX <-
-  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("SIX"),]
+  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("SIX"), ]
+```
 
-#Primary infection & 6-month follow-up
+## 2.b.4 Primary infection & 6-month follow-up
+```{r}
+# Primary infection & 6-month follow-up
 xdata_selectR2OS <-
-  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE", "SIX"),] 
+  xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE", "SIX"), ]
+```
 
-#Without Healthy controls
+## 2.b.5 Without Healthy controls
+```{r}
+# Without Healthy controls
 xdata_selectRnH <-
-  xdata_selectR[xdata_selectR$SevMax2 %in% c("Mild", "Severe"),]          
+  xdata_selectR[xdata_selectR$SevMax2 %in% c("Mild", "Severe"), ]
+
 xdata_selectRONEnH <-
-  xdata_selectRONE[xdata_selectRONE$SevMax2 %in% c("Mild", "Severe"),]
+  xdata_selectRONE[xdata_selectRONE$SevMax2 %in% c("Mild", "Severe"), ]
+
 xdata_selectRSIXnH <-
-  xdata_selectRSIX[xdata_selectRSIX$SevMax2 %in% c("Mild", "Severe"),]
+  xdata_selectRSIX[xdata_selectRSIX$SevMax2 %in% c("Mild", "Severe"), ]
+
 xdata_selectRnHOS <-
-  xdata_selectRnH[xdata_selectRnH$Sampling_month %in% c("ONE", "SIX"),]
+  xdata_selectRnH[xdata_selectRnH$Sampling_month %in% c("ONE", "SIX"), ]
+```
 
-#Only Healhty controls
+## 2.b.6 Only Healthy controls
+```{r}
+# Only Healthy controls
 xdata_selectONEH <-
-  xdata_selectONE[xdata_selectONE$SevMax2 %in% c("Healthy"),]   
+  xdata_selectONE[xdata_selectONE$SevMax2 %in% c("Healthy"), ]
+```
 
-#Patients with history of asthma
+## 2.b.7 Patients with history of asthma
+```{r}
+# Patients with history of asthma
 xdata_selectRONE_Asthma <-
-  xdata_selectRONE[xdata_selectRONE$Asthma %in% c("YES"),]  
+  xdata_selectRONE[xdata_selectRONE$Asthma %in% c("YES"), ]
+
 xdata_selectRONE_nAsthma <-
-  xdata_selectRONE[xdata_selectRONE$Asthma %in% c("NO"),]
+  xdata_selectRONE[xdata_selectRONE$Asthma %in% c("NO"), ]
+```
 
-#Hospitalized patients
+## 2.b.8 Hospitalized patients
+```{r}
+# Hospitalized patients
 xdata_selectRONEHosp <-
-  xdata_selectRONE[xdata_selectRONE$Hospitalized %in% c("YES"),]  
+  xdata_selectRONE[xdata_selectRONE$Hospitalized %in% c("YES"), ]
+
 xdata_selectRONEnHosp <-
-  xdata_selectRONE[xdata_selectRONE$Hospitalized %in% c("NO"),]
+  xdata_selectRONE[xdata_selectRONE$Hospitalized %in% c("NO"), ]
+```
 
-#Patients with PACS
+## 2.b.9 Patients with PACS
+```{r}
+# Patients with PACS
 xdata_selectR2ONEPACS <-
-  xdata_selectR2ONE[xdata_selectR2ONE$PACS %in% c("YES"),]  
-xdata_selectR2ONEnPACS <-
-  xdata_selectR2ONE[xdata_selectR2ONE$PACS %in% c("NO"),]
+  xdata_selectR2ONE[xdata_selectR2ONE$PACS %in% c("YES"), ]
 
-#Complete observaions: Patients with blood sampling at all three patient visits
+xdata_selectR2ONEnPACS <-
+  xdata_selectR2ONE[xdata_selectR2ONE$PACS %in% c("NO"), ]
+```
+
+## 2.b.10 Complete observations: Patients with blood sampling at all three patient visits
+```{r}
+# Complete observations: Patients with blood sampling at all three patient visits
 xdata_selectRcOST <-
-  xdata_selectR[xdata_selectR$Complete_OST %in% c("YES"),]  
+  xdata_selectR[xdata_selectR$Complete_OST %in% c("YES"), ]
 
 xdata_selectR2cOST <-
-  xdata_selectR2[xdata_selectR2$Complete_OST %in% c("YES"),]
+  xdata_selectR2[xdata_selectR2$Complete_OST %in% c("YES"), ]
+
 xdata_selectRcOSTPACS <-
-  xdata_selectRcOST[xdata_selectRcOST$PACS %in% c("YES"),]
+  xdata_selectRcOST[xdata_selectRcOST$PACS %in% c("YES"), ]
+
 xdata_selectRcOSTnPACS <-
-  xdata_selectRcOST[xdata_selectRcOST$PACS %in% c("NO"),]
+  xdata_selectRcOST[xdata_selectRcOST$PACS %in% c("NO"), ]
 ```
 
 # 2c. Comparisons and color vectors
-
 ```{r}
 my_comparisons <-
   list(c("Healthy", "Mild") ,
        c("Healthy", "Severe"),
        c("Mild", "Severe"))
+
 my_colors_PACS <- c("#ffa44a", "#c7264f")
 ```
 
