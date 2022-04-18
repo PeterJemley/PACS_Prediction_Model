@@ -28,7 +28,11 @@ cat("\014")
 ```
 
 # 1. Import & load packages
-Packages are listed alphabetically to check versions with packageVersion(). 
+
+### Packages are listed alphabetically.
+
+### Versions were checked with *packageVersion().*
+
 ```{r}
 library("biostatUZH", quietly = TRUE)                 #version 1.8.0
 # packageVersion("biostatUZH")
@@ -92,20 +96,22 @@ library("tidyverse", quietly = TRUE)                  #version 1.3.1
 ```
 
 # 2. Data wrangling and grouping
-# 2a. Import Data
-```{r}
-#Import Data
-current_path = rstudioapi::getActiveDocumentContext()$path
-setwd(dirname(current_path))
 
-#Enter excel file name
+## 2a. Import Data
+
+```{r}
+# Import Data
+current_path = rstudioapi::getActiveDocumentContext()$path
+# setwd(dirname(current_path))
+
+# Enter excel file name
 xdata <-
   read_excel(
     "/Users/peter/Documents/GitHub/PACS_Prediction_Model/PACS_Prediction_Model/41467_2021_27797_MOESM5_ESM.xlsx",
     na = "NA"
   )
 
-#Factors
+# Factors
 xdata$Sampling_month <- factor(xdata$Sampling_month,
                                levels = c("ONE", "SIX", "TWELVE"))
 
@@ -135,7 +141,7 @@ xdata$Hospitalized <- factor(xdata$Hospitalized,
 xdata$PACS <- factor(xdata$PACS,
                      levels = c("NO", "YES"))
 
-#Add Healthy to six month measurements
+# Add Healthy to six month measurements
 healthy <-
   xdata %>% filter(SevMax2 == "Healthy") %>% mutate(Sampling_month = "SIX",
                                                     Complete_OST = "NO")
@@ -144,19 +150,23 @@ xdata <- rbind(xdata, healthy)
 ```
 
 # 2b. Create groups
-## 2b.1 Followed-up patients
+
+### 2b.1 Followed-up patients
+
 ```{r}
 # Followed-up patients
 xdata_selectR <- xdata[xdata$Resampling %in% c("YES"), ]
 ```
 
 ## 2b.2 Followed-up patients + healthy controls
+
 ```{r}
 # Followed-up patients + healthy controls
 xdata_selectR2 <- xdata[xdata$Resampling_andH %in% c("YES"), ]
 ```
 
-## 2b.3 Primary infection
+### 2b.3 Primary infection
+
 ```{r}
 # Primary infection
 xdata_selectONE <- xdata[xdata$Sampling_month %in% c("ONE"), ]
@@ -168,7 +178,8 @@ xdata_selectR2ONE <-
   xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE"), ]
 ```
 
-## 2.b.3 6-month follow-up
+### 2.b.4 6-month follow-up
+
 ```{r}
 # 6-month follow-up
 xdata_selectRSIX <-
@@ -178,14 +189,16 @@ xdata_selectR2SIX <-
   xdata_selectR2[xdata_selectR2$Sampling_month %in% c("SIX"), ]
 ```
 
-## 2.b.4 Primary infection & 6-month follow-up
+### 2.b.5 Primary infection & 6-month follow-up
+
 ```{r}
 # Primary infection & 6-month follow-up
 xdata_selectR2OS <-
   xdata_selectR2[xdata_selectR2$Sampling_month %in% c("ONE", "SIX"), ]
 ```
 
-## 2.b.5 Without Healthy controls
+### 2.b.6 Without Healthy controls
+
 ```{r}
 # Without Healthy controls
 xdata_selectRnH <-
@@ -201,14 +214,16 @@ xdata_selectRnHOS <-
   xdata_selectRnH[xdata_selectRnH$Sampling_month %in% c("ONE", "SIX"), ]
 ```
 
-## 2.b.6 Only Healthy controls
+### 2.b.7 Only Healthy controls
+
 ```{r}
 # Only Healthy controls
 xdata_selectONEH <-
   xdata_selectONE[xdata_selectONE$SevMax2 %in% c("Healthy"), ]
 ```
 
-## 2.b.7 Patients with history of asthma
+### 2.b.8 Patients with history of asthma
+
 ```{r}
 # Patients with history of asthma
 xdata_selectRONE_Asthma <-
@@ -218,7 +233,8 @@ xdata_selectRONE_nAsthma <-
   xdata_selectRONE[xdata_selectRONE$Asthma %in% c("NO"), ]
 ```
 
-## 2.b.8 Hospitalized patients
+### 2.b.9 Hospitalized patients
+
 ```{r}
 # Hospitalized patients
 xdata_selectRONEHosp <-
@@ -228,7 +244,8 @@ xdata_selectRONEnHosp <-
   xdata_selectRONE[xdata_selectRONE$Hospitalized %in% c("NO"), ]
 ```
 
-## 2.b.9 Patients with PACS
+### 2.b.10 Patients with PACS
+
 ```{r}
 # Patients with PACS
 xdata_selectR2ONEPACS <-
@@ -238,7 +255,8 @@ xdata_selectR2ONEnPACS <-
   xdata_selectR2ONE[xdata_selectR2ONE$PACS %in% c("NO"), ]
 ```
 
-## 2.b.10 Complete observations: Patients with blood sampling at all three patient visits
+### 2.b.11 Complete observations: Patients with blood sampling at all three patient visits
+
 ```{r}
 # Complete observations: Patients with blood sampling at all three patient visits
 xdata_selectRcOST <-
@@ -255,6 +273,7 @@ xdata_selectRcOSTnPACS <-
 ```
 
 # 2c. Comparisons and color vectors
+
 ```{r}
 my_comparisons <-
   list(c("Healthy", "Mild") ,
@@ -265,6 +284,7 @@ my_colors_PACS <- c("#ffa44a", "#c7264f")
 ```
 
 # 3. Functions for data analysis
+
 ```{r}
 alpha <- scales::alpha
 ```
