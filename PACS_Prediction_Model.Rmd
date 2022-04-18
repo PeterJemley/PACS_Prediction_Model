@@ -21,7 +21,6 @@ header-includes:
 - \usepackage{dcolumn}
 ---
 
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 rm(list = ls())
@@ -29,32 +28,35 @@ cat("\014")
 ```
 
 # 1. Import packages and data
+
 ```{r}
-library("grid")
+library("grid", quietly = TRUE)
 # install.packages("biostatUZH", repos = "http://R-Forge.R-project.org")
-library("biostatUZH")                 #version 1.8.-1
+library("biostatUZH", quietly = TRUE)                 #version 1.8.-1
 # install.packages("remotes")
 # remotes::install_github("BavoDC/CalibrationCurves")
-library("CalibrationCurves")          #version 0.1.2
-library("ggplot2")                    #version 3.3.5
-library("ggpubr")                     #version 0.4.0
-library("tidyverse")                  #version 1.3.1
-library("readxl")                     #version 1.3.1
-library("rstudioapi")                 #version 0.13
-library("epitools")                   #version 0.5-10.1
-library("pROC")                       #version 1.18.0
-library("gbm")                        #version 2.1.8
-library("shrink")                     #version 1.2.1
-library("ggstatsplot")                #version 0.9.0
-library("dcurves")                    #version 0.2.0
-library("mgcv")                       #version 1.8-38
-library("sjPlot")                     #version 2.8.9 
-library("scales")                     #version 1.1.1
-library("interactions")               #version 1.1.5
+library("CalibrationCurves", quietly = TRUE)          #version 0.1.2
+library("ggplot2", quietly = TRUE)                    #version 3.3.5
+library("ggpubr", quietly = TRUE)                     #version 0.4.0
+library("tidyverse", quietly = TRUE)                  #version 1.3.1
+library("readxl", quietly = TRUE)                     #version 1.3.1
+library("rstudioapi", quietly = TRUE)                 #version 0.13
+library("epitools", quietly = TRUE)                   #version 0.5-10.1
+library("pROC", quietly = TRUE)                       #version 1.18.0
+library("gbm", quietly = TRUE)                        #version 2.1.8
+library("shrink", quietly = TRUE)                     #version 1.2.1
+library("ggstatsplot", quietly = TRUE)                #version 0.9.0
+library("dcurves", quietly = TRUE)                    #version 0.2.0
+library("mgcv", quietly = TRUE)                       #version 1.8-38
+library("sjPlot", quietly = TRUE)                     #version 2.8.9
+library("scales", quietly = TRUE)                     #version 1.1.1
+library("interactions", quietly = TRUE)               #version 1.1.5
 ```
 
 # 2. Data wrangling and grouping
+
 # 2a. Import Data
+
 ```{r}
 #Import Data
 current_path = rstudioapi::getActiveDocumentContext()$path
@@ -62,8 +64,10 @@ setwd(dirname(current_path))
 
 #Enter excel file name
 xdata <-
-  read_excel("/Users/peterjemley/Downloads/41467_2021_27797_MOESM5_ESM.xlsx",
-             na = "NA")
+  read_excel(
+    "/Users/peter/Documents/GitHub/PACS_Prediction_Model/PACS_Prediction_Model/41467_2021_27797_MOESM5_ESM.xlsx",
+    na = "NA"
+  )
 
 #Factors
 xdata$Sampling_month <- factor(xdata$Sampling_month,
@@ -102,6 +106,7 @@ xdata <- rbind(xdata, healthy)
 ```
 
 # 2b. Create groups
+
 ```{r}
 xdata_selectR <-
   #followed-up patients
@@ -174,6 +179,7 @@ xdata_selectRcOSTnPACS <-
 ```
 
 # 2c. Comparisons and color vectors
+
 ```{r}
 my_comparisons <-
   list(c("Healthy", "Mild") ,
@@ -183,10 +189,10 @@ my_colors_PACS <- c("#ffa44a", "#c7264f")
 ```
 
 # 3. Functions for data analysis
+
 ```{r}
 alpha <- scales::alpha
 ```
-
 
 ```{r}
 GeomSplitViolin <- ggproto(
@@ -298,7 +304,9 @@ dodge <- position_dodge(width = .5)
 ```
 
 # 4. Analysis of total immunoglobulin levels
+
 # 4a. IgM
+
 ```{r}
 ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgM, fill = COVID)) +
   geom_split_violin(trim = F, draw_quantiles = 0.5) +
@@ -469,6 +477,7 @@ grid.text(
 ```
 
 # 4b. IgG1
+
 ```{r}
 ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgG1, fill = COVID)) +
   geom_split_violin(trim = F, draw_quantiles = 0.5) +
@@ -640,8 +649,8 @@ grid.text(
 )
 ```
 
-
 # 4c. IgG3
+
 ```{r}
 ggplot(xdata_selectR2ONEnPACS,
        aes(x = SevMax2, y = IgG1_per, fill = SevMax2)) +
@@ -888,8 +897,8 @@ ggplot(xdata_selectR2ONEPACS,
   )
 ```
 
-
 # 4d. IgA
+
 ```{r}
 ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgA, fill = COVID)) +
   geom_split_violin(trim = F, draw_quantiles = 0.5) +
@@ -1061,8 +1070,8 @@ grid.text(
 )
 ```
 
-
 # 4e. IgG2
+
 ```{r}
 ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgG2, fill = COVID)) +
   geom_split_violin(trim = F, draw_quantiles = 0.5) +
@@ -1268,8 +1277,8 @@ ggplot(xdata_selectR2ONEPACS,
   )
 ```
 
-
 # 4f. IgG4
+
 ```{r}
 ggplot(xdata_selectR2OS, aes(x = Sampling_month, y = IgG4, fill = COVID)) +
   geom_split_violin(trim = F, draw_quantiles = 0.5) +
@@ -1475,9 +1484,10 @@ ggplot(xdata_selectR2ONEPACS,
   )
 ```
 
-
 # 5. Development of prediction model's variables
+
 # 5a. Linearity of variables
+
 ```{r}
 plot(gam(
   PACS ~ s(Age),
@@ -1515,6 +1525,7 @@ plot(gam(
 ```
 
 # 5b. Age
+
 ```{r}
 ggplot(xdata_selectRONEnH, aes(x = Sampling_month, y = Age, fill = PACS)) +
   geom_split_violin(trim = F, draw_quantiles = 0.5) +
@@ -1533,6 +1544,7 @@ ggplot(xdata_selectRONEnH, aes(x = Sampling_month, y = Age, fill = PACS)) +
 ```
 
 # 5c. Number of symptoms during primary infection
+
 ```{r}
 ggplot(xdata_selectRONEnH,
        aes(x = Sampling_month, y = Nr_Symptoms, fill = PACS)) +
@@ -1580,6 +1592,7 @@ barplot(
 ```
 
 # 5d. History of asthma bronchiale
+
 ```{r}
 pie(
   table(xdata_selectRONE_nAsthma$PACS),
@@ -1626,6 +1639,7 @@ ggplot(xdata_selectONE, aes(x = Asthma, y = IgG3)) +
 ```
 
 # 5e. COVID-19 severity/hospitalization
+
 ```{r}
 Sev <- table(xdata_selectRONEnH$SevMax6, xdata_selectRONEnH$PACS)
 Sev_per <-
@@ -1648,8 +1662,8 @@ barplot(
 )
 ```
 
-
 # 6. Development of prediction model: PACS score
+
 ```{r}
 PACS_model <-
   glm(
@@ -1670,6 +1684,7 @@ ggcoefstats(PACS_model, output = "tidy")
 ```
 
 # 6a. Primary infection
+
 ```{r}
 PACS_model_sh <-
   shrink(PACS_model, type = "global", method = "dfbeta")
@@ -1760,6 +1775,7 @@ grid.text(
 ```
 
 # 6b. 6-months follow-up
+
 ```{r}
 PACS_predictions_6m <-
   predict(PACS_model_sh, xdata_selectRSIXnH, type = "response")
@@ -1815,6 +1831,7 @@ grid.text(
 ```
 
 # 6c. Decision curve analysis
+
 ```{r}
 xdata_selectRONEnH_2 <-
   xdata_selectRONEnH %>%
@@ -1832,6 +1849,7 @@ dca(PACS ~
 ```
 
 # 6d. Interaction plots
+
 ```{r}
 interact_plot(
   PACS_model,
@@ -1851,8 +1869,8 @@ interact_plot(
 )
 ```
 
-
 # 7. Code for implementation of PACS score
+
 ```{r}
 xdata_selectRONEnHnew = xdata_selectRONEnH %>%
   mutate(Asthma = ifelse(Asthma == "YES", 1, 0))
@@ -1883,4 +1901,3 @@ pROC::plot.roc(
   legacy.axes = TRUE
 )
 ```
-
