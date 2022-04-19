@@ -42,6 +42,12 @@ library("CalibrationCurves", quietly = TRUE)          #version 0.1.2
 # packageVersion("CalibrationCurves")
 # remotes::install_github("BavoDC/CalibrationCurves")
 
+library(checkpoint)
+current_r_version <- getRversion()
+create_checkpoint("2022-04-19", r_version = current_r_version, project_dir = "/Users/peter/Documents/GitHub/PACS_Prediction_Model/PACS_Prediction_Model/PACS_Prediction_Model.Rproj")
+use_checkpoint("2022-04-19", r_version = current_r_version)
+
+
 library("dcurves", quietly = TRUE)                    #version 0.2.0
 # packageVersion("dcurves")
 
@@ -158,7 +164,7 @@ xdata <- rbind(xdata, healthy)
 xdata_selectR <- xdata[xdata$Resampling %in% c("YES"), ]
 ```
 
-## 2b.2 Followed-up patients + healthy controls
+### 2b.2 Followed-up patients + healthy controls
 
 ```{r}
 # Followed-up patients + healthy controls
@@ -1924,7 +1930,7 @@ grid.text(
   gp = gpar(fontsize = 11.5, col = "black")
 )
 ```
-
+# LEFT OFF HERE
 # 6c. Decision curve analysis
 
 ```{r}
