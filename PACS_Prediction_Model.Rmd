@@ -158,7 +158,7 @@ xdata <- rbind(xdata, healthy)
 xdata_selectR <- xdata[xdata$Resampling %in% c("YES"), ]
 ```
 
-## 2b.2 Followed-up patients + healthy controls
+### 2b.2 Followed-up patients + healthy controls
 
 ```{r}
 # Followed-up patients + healthy controls
@@ -1924,7 +1924,7 @@ grid.text(
   gp = gpar(fontsize = 11.5, col = "black")
 )
 ```
-
+# LEFT OFF HERE
 # 6c. Decision curve analysis
 
 ```{r}
