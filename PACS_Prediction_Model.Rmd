@@ -33,21 +33,36 @@ cat("\014")
 
 ### Versions were checked with *packageVersion().*
 
+# TO_DO 
+# checkpoint {checkpoint} cannot currently function correctly with the remotely installed libraries.
+
 ```{r}
+# Packages requiring remote installation
+
+# install.packages("remotes")
+library("remotes", quietly = TRUE)                    #version 2.4.2
+# packageVersion("remotes")
+
+# install.packages("biostatUZH", repos = "http://R-Forge.R-project.org")
 library("biostatUZH", quietly = TRUE)                 #version 1.8.0
 # packageVersion("biostatUZH")
-# install.packages("biostatUZH", repos = "http://R-Forge.R-project.org")
+
 
 library("CalibrationCurves", quietly = TRUE)          #version 0.1.2
 # packageVersion("CalibrationCurves")
 # remotes::install_github("BavoDC/CalibrationCurves")
 
-library(checkpoint)
-current_r_version <- getRversion()
-create_checkpoint("2022-04-19", r_version = current_r_version, project_dir = "/Users/peter/Documents/GitHub/PACS_Prediction_Model/PACS_Prediction_Model/PACS_Prediction_Model.Rproj")
-use_checkpoint("2022-04-19", r_version = current_r_version)
+
+# Checkpoint Package
+# library(checkpoint)
+# current_r_version <- getRversion()
+# create_checkpoint("2022-04-19",
+#                   r_version = current_r_version,
+#                   project_dir = "/Users/macminim1/Documents/GitHub/PACS_Prediction_Model")
+# use_checkpoint("2022-04-19", r_version = current_r_version)
 
 
+# Libraries installed with install.packages() {utils}:
 library("dcurves", quietly = TRUE)                    #version 0.2.0
 # packageVersion("dcurves")
 
@@ -81,10 +96,6 @@ library("pROC", quietly = TRUE)                       #version 1.18.0
 library("readxl", quietly = TRUE)                     #version 1.4.0
 # packageVersion("readxl")
 
-# library("remotes", quietly = TRUE)                  #version 2.4.2
-# install.packages("remotes")                           
-# packageVersion("remotes")
-
 library("rstudioapi", quietly = TRUE)                 #version 0.13
 # packageVersion("rstudioapi")
 
@@ -108,12 +119,12 @@ library("tidyverse", quietly = TRUE)                  #version 1.3.1
 ```{r}
 # Import Data
 current_path = rstudioapi::getActiveDocumentContext()$path
-# setwd(dirname(current_path))
+setwd(dirname(current_path))
 
 # Enter excel file name
 xdata <-
   read_excel(
-    "/Users/peter/Documents/GitHub/PACS_Prediction_Model/PACS_Prediction_Model/41467_2021_27797_MOESM5_ESM.xlsx",
+    "~/Documents/GitHub/PACS_Prediction_Model/41467_2021_27797_MOESM5_ESM.xlsx",
     na = "NA"
   )
 
