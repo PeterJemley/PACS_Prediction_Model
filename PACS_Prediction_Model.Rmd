@@ -124,7 +124,7 @@ setwd(dirname(current_path))
 # Enter excel file name
 xdata <-
   read_excel(
-    "~/Documents/GitHub/PACS_Prediction_Model/41467_2021_27797_MOESM5_ESM.xlsx",
+    "~/Downloads/PACS_Prediction_Model/41467_2021_27797_MOESM5_ESM.xlsx",
     na = "NA"
   )
 
